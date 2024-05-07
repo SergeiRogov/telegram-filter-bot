@@ -10,8 +10,34 @@ import (
 )
 
 var dbConn *pgx.Conn
-
 var filterWord string
+
+func main() {
+    initDB()
+
+	bot, err := tgbotapi.NewBotAPI("token")
+	if err != nil {
+		log.Panic(err)
+	}
+
+	bot.Debug = true
+	log.Printf("Authorized on account %s", bot.Self.UserName)
+
+	u := tgbotapi.NewUpdate(0)
+	u.Timeout = 60
+
+	updates := bot.GetUpdatesChan(u)
+
+	for update := range updates {
+		if update.Message != nil {
+			if update.Message.IsCommand() {
+				handleCommand(bot, update.Message)
+			} else {
+				handleRegularMessage(bot, update.Message)
+			}
+		}
+	}
+}
 
 // Initialize database connection
 func initDB() {
@@ -27,50 +53,24 @@ func initDB() {
     dbConn = conn
 }
 
-func main() {
-	
-    initDB() // Initialize database connection
-
-	bot, err := tgbotapi.NewBotAPI("token")
-	if err != nil {
-		log.Panic(err)
-	}
-
-	bot.Debug = true
-
-	log.Printf("Authorized on account %s", bot.Self.UserName)
-
-	u := tgbotapi.NewUpdate(0)
-	u.Timeout = 60
-
-	updates := bot.GetUpdatesChan(u)
-
-	for update := range updates {
-		if update.Message != nil {
-			if update.Message.IsCommand() {
-				handleCommand(bot, update.Message)
-			} else {
-
-				if filterWord == "" {
-
-					response := fmt.Sprintf("You have to set a filter word first.")
-					msg := tgbotapi.NewMessage(update.Message.Chat.ID, response)
-					_, err := bot.Send(msg)
-					if err != nil {
-						log.Printf("Error sending message: %v", err)
-					}
-
-				} else {
-
-					if strings.Contains(strings.ToLower(update.Message.Text), strings.ToLower(filterWord)) {
-						saveMessageFilteredTable(bot, update.Message)
-					} else {
-						saveMessageNotFilteredTable(bot, update.Message)
-					}
-
-				}
-			}
+func handleRegularMessage(bot *tgbotapi.BotAPI, message *tgbotapi.Message){
+	if filterWord == "" {
+		response := fmt.Sprintf("You have to set a filter word first.")
+		sendMessage(bot, message.Chat.ID, response)
+	} else {
+		if strings.Contains(strings.ToLower(update.Message.Text), strings.ToLower(filterWord)) {
+			saveMessageFilteredTable(bot, update.Message)
+		} else {
+			saveMessageNotFilteredTable(bot, update.Message)
 		}
+	}
+}
+
+func sendMessage(bot *tgbotapi.BotAPI, chatID int64, text string) {
+	msg := tgbotapi.NewMessage(chatID, text)
+	_, err := bot.Send(msg)
+	if err != nil {
+		log.Printf("Error sending message: %v", err)
 	}
 }
 
@@ -78,13 +78,12 @@ func handleCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 	switch message.Command() {
 	case "filter":
 		handleFilterCommand(bot, message)
+	case "start":
+		response := "Welcome! This bot is designed to filter messages based on a specified keyword."
+		sendMessage(bot, message.Chat.ID, response)
 	default:
-		response := fmt.Sprintf("%s command is not supported here.", message.Command())
-		msg := tgbotapi.NewMessage(message.Chat.ID, response)
-		_, err := bot.Send(msg)
-		if err != nil {
-			log.Printf("Error sending message: %v", err)
-		}
+		response := fmt.Sprintf("/%s command is not supported here.", message.Command())
+		sendMessage(bot, message.Chat.ID, response)
 	}
 }
 
@@ -100,13 +99,7 @@ func handleFilterCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 		filterWord = argumentWord
 		response = fmt.Sprintf("Filter keyword set to: %s", filterWord)
 	}
-
-	msg := tgbotapi.NewMessage(message.Chat.ID, response)
-	_, err := bot.Send(msg)
-	if err != nil {
-		log.Printf("Error sending message: %v", err)
-	}
-	
+	sendMessage(bot, message.Chat.ID, response)
 }
 
 func saveMessageFilteredTable(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
@@ -121,16 +114,12 @@ func saveMessageFilteredTable(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
         senderID, sendingDate, messageID, messageText, filterWord)
     if err != nil {
         log.Printf("Error saving message to filtered_messages table: %v\n", err)
+		sendMessage(bot, message.Chat.ID, "Failed to save message.")
         return
     }
 	
-	response := fmt.Sprintf("Message is saved to filtered table with keyword: %s", filterWord)
-	msg := tgbotapi.NewMessage(message.Chat.ID, response)
-	_, sendErr := bot.Send(msg)
-
-	if sendErr != nil {
-		log.Printf("Error sending message: %v", err)
-	}
+	response := fmt.Sprintf("Message is saved to filtered_messages table with keyword: %s", filterWord)
+	sendMessage(bot, message.Chat.ID, response)
 }
 
 func saveMessageNotFilteredTable(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
@@ -145,13 +134,9 @@ func saveMessageNotFilteredTable(bot *tgbotapi.BotAPI, message *tgbotapi.Message
         senderID, sendingDate, messageID, messageText)
     if err != nil {
         log.Printf("Error saving message to not_filtered_messages table: %v\n", err)
+		sendMessage(bot, message.Chat.ID, "Failed to save message.")
         return
     }
 
-    response := "Message is saved to not filtered table"
-    msg := tgbotapi.NewMessage(message.Chat.ID, response)
-    _, sendErr := bot.Send(msg)
-    if sendErr != nil {
-        log.Printf("Error sending message: %v\n", err)
-    }
+    sendMessage(bot, message.Chat.ID, "Message is saved to not_filtered_messages table")
 }
