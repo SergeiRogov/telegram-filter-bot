@@ -12,6 +12,9 @@ import (
 var dbConn *pgx.Conn
 var filterWord string
 
+/*
+   main function - kick-starts the application.
+*/
 func main() {
     initDB()
 
@@ -39,7 +42,9 @@ func main() {
 	}
 }
 
-// Initialize database connection
+/*
+   initDB function - initializes database connection.
+*/
 func initDB() {
 	// Define the PostgreSQL connection string
     connectionString := "postgresql://postgres:pass@localhost:5433/filter_messages"
@@ -53,6 +58,9 @@ func initDB() {
     dbConn = conn
 }
 
+/*
+   handleCommand function - performs actions based on the command entered.
+*/
 func handleCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 	switch message.Command() {
 	case "filter":
@@ -70,6 +78,9 @@ func handleCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 	}
 }
 
+/*
+   handleFilterCommand function - performs actions corresponding to /filter command.
+*/
 func handleFilterCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 	args := message.CommandArguments()
 	argumentWord := strings.TrimSpace(args)
@@ -85,6 +96,9 @@ func handleFilterCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 	sendMessage(bot, message.Chat.ID, response)
 }
 
+/*
+   handleRegularMessage function - performs actions corresponding to non-command messages.
+*/
 func handleRegularMessage(bot *tgbotapi.BotAPI, message *tgbotapi.Message){
 	if filterWord == "" {
 		response := fmt.Sprintf("You have to set a filter word first.")
@@ -98,6 +112,9 @@ func handleRegularMessage(bot *tgbotapi.BotAPI, message *tgbotapi.Message){
 	}
 }
 
+/*
+   sendMessage function - sends a message in a chat.
+*/
 func sendMessage(bot *tgbotapi.BotAPI, chatID int64, text string) {
 	msg := tgbotapi.NewMessage(chatID, text)
 	_, err := bot.Send(msg)
@@ -106,6 +123,12 @@ func sendMessage(bot *tgbotapi.BotAPI, chatID int64, text string) {
 	}
 }
 
+/*
+   saveMessageToTable function - saves a message 
+   to filtered_messages table in a database if a message contains the keyword 
+   OR
+   to not_filtered_messages otherwise.
+*/
 func saveMessageToTable(bot *tgbotapi.BotAPI, message *tgbotapi.Message, tableName string) {
 	senderID := message.Chat.ID
 	sendingDate := message.Time()
