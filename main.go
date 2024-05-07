@@ -53,27 +53,6 @@ func initDB() {
     dbConn = conn
 }
 
-func handleRegularMessage(bot *tgbotapi.BotAPI, message *tgbotapi.Message){
-	if filterWord == "" {
-		response := fmt.Sprintf("You have to set a filter word first.")
-		sendMessage(bot, message.Chat.ID, response)
-	} else {
-		if strings.Contains(strings.ToLower(update.Message.Text), strings.ToLower(filterWord)) {
-			saveMessageFilteredTable(bot, update.Message)
-		} else {
-			saveMessageNotFilteredTable(bot, update.Message)
-		}
-	}
-}
-
-func sendMessage(bot *tgbotapi.BotAPI, chatID int64, text string) {
-	msg := tgbotapi.NewMessage(chatID, text)
-	_, err := bot.Send(msg)
-	if err != nil {
-		log.Printf("Error sending message: %v", err)
-	}
-}
-
 func handleCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 	switch message.Command() {
 	case "filter":
@@ -84,6 +63,19 @@ func handleCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 	default:
 		response := fmt.Sprintf("/%s command is not supported here.", message.Command())
 		sendMessage(bot, message.Chat.ID, response)
+	}
+}
+
+func handleRegularMessage(bot *tgbotapi.BotAPI, message *tgbotapi.Message){
+	if filterWord == "" {
+		response := fmt.Sprintf("You have to set a filter word first.")
+		sendMessage(bot, message.Chat.ID, response)
+	} else {
+		if strings.Contains(strings.ToLower(update.Message.Text), strings.ToLower(filterWord)) {
+			saveMessageFilteredTable(bot, update.Message)
+		} else {
+			saveMessageNotFilteredTable(bot, update.Message)
+		}
 	}
 }
 
@@ -100,6 +92,14 @@ func handleFilterCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 		response = fmt.Sprintf("Filter keyword set to: %s", filterWord)
 	}
 	sendMessage(bot, message.Chat.ID, response)
+}
+
+func sendMessage(bot *tgbotapi.BotAPI, chatID int64, text string) {
+	msg := tgbotapi.NewMessage(chatID, text)
+	_, err := bot.Send(msg)
+	if err != nil {
+		log.Printf("Error sending message: %v", err)
+	}
 }
 
 func saveMessageFilteredTable(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
