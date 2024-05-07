@@ -42,7 +42,7 @@ func main() {
 // Initialize database connection
 func initDB() {
 	// Define the PostgreSQL connection string
-    connectionString := "postgresql://postgres:password@localhost:5433/filter_messages"
+    connectionString := "postgresql://postgres:pass@localhost:5433/filter_messages"
 
     // Establish a database connection using the PostgreSQL connection string
     conn, err := pgx.Connect(context.Background(), connectionString)
@@ -58,24 +58,15 @@ func handleCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 	case "filter":
 		handleFilterCommand(bot, message)
 	case "start":
-		response := "Welcome! This bot is designed to filter messages based on a specified keyword."
+		response := "Welcome! This bot is designed to filter messages based on a specified keyword.\n\n" +
+		"To use this bot:\n" +
+		"- Type `/filter your_word` to set a filter keyword. After setting a filter, messages containing the specified keyword will be saved to the `filtered_messages` table.\n" +
+		"- Messages that do not contain the filter keyword will be saved to the `not_filtered_messages` table.\n\n" +
+		"Start by setting your filter with `/filter your_word` to begin filtering messages."
 		sendMessage(bot, message.Chat.ID, response)
 	default:
 		response := fmt.Sprintf("/%s command is not supported here.", message.Command())
 		sendMessage(bot, message.Chat.ID, response)
-	}
-}
-
-func handleRegularMessage(bot *tgbotapi.BotAPI, message *tgbotapi.Message){
-	if filterWord == "" {
-		response := fmt.Sprintf("You have to set a filter word first.")
-		sendMessage(bot, message.Chat.ID, response)
-	} else {
-		if strings.Contains(strings.ToLower(update.Message.Text), strings.ToLower(filterWord)) {
-			saveMessageFilteredTable(bot, update.Message)
-		} else {
-			saveMessageNotFilteredTable(bot, update.Message)
-		}
 	}
 }
 
@@ -94,6 +85,19 @@ func handleFilterCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 	sendMessage(bot, message.Chat.ID, response)
 }
 
+func handleRegularMessage(bot *tgbotapi.BotAPI, message *tgbotapi.Message){
+	if filterWord == "" {
+		response := fmt.Sprintf("You have to set a filter word first.")
+		sendMessage(bot, message.Chat.ID, response)
+	} else {
+		if strings.Contains(strings.ToLower(message.Text), strings.ToLower(filterWord)) {
+			saveMessageToTable(bot, message, "filtered_messages")
+		} else {
+			saveMessageToTable(bot, message, "not_filtered_messages")
+		}
+	}
+}
+
 func sendMessage(bot *tgbotapi.BotAPI, chatID int64, text string) {
 	msg := tgbotapi.NewMessage(chatID, text)
 	_, err := bot.Send(msg)
@@ -102,41 +106,38 @@ func sendMessage(bot *tgbotapi.BotAPI, chatID int64, text string) {
 	}
 }
 
-func saveMessageFilteredTable(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
+func saveMessageToTable(bot *tgbotapi.BotAPI, message *tgbotapi.Message, tableName string) {
 	senderID := message.Chat.ID
 	sendingDate := message.Time()
 	messageID := message.MessageID
 	messageText := message.Text
 
-	// Save message into filtered_messages table
-    _, err := dbConn.Exec(context.Background(),
-        "INSERT INTO filtered_messages (sender_id, sending_date, message_id, message_contents, filter_word) VALUES ($1, $2, $3, $4, $5)",
-        senderID, sendingDate, messageID, messageText, filterWord)
-    if err != nil {
-        log.Printf("Error saving message to filtered_messages table: %v\n", err)
-		sendMessage(bot, message.Chat.ID, "Failed to save message.")
-        return
-    }
-	
-	response := fmt.Sprintf("Message is saved to filtered_messages table with keyword: %s", filterWord)
+	var query string
+	var response string
+
+	switch tableName {
+	case "filtered_messages":
+		query = "INSERT INTO filtered_messages (sender_id, sending_date, message_id, message_contents, filter_word) VALUES ($1, $2, $3, $4, $5)"
+		response = fmt.Sprintf("Message is saved to filtered_messages table with keyword: %s", filterWord)
+		// Save message into the filtered_messages table
+		_, err := dbConn.Exec(context.Background(), query, senderID, sendingDate, messageID, messageText, filterWord)
+		if err != nil {
+			log.Printf("Error saving message to filtered_messages table: %v", err)
+			response = "Failed to save message."
+		}
+	case "not_filtered_messages":
+		query = "INSERT INTO not_filtered_messages (sender_id, sending_date, message_id, message_contents) VALUES ($1, $2, $3, $4)"
+		response = "Message is saved to not_filtered_messages table"
+		// Save message into the not_filtered_messages table
+		_, err := dbConn.Exec(context.Background(), query, senderID, sendingDate, messageID, messageText)
+		if err != nil {
+			log.Printf("Error saving message to not_filtered_messages table: %v", err)
+			response = "Failed to save message."
+		}
+	default:
+		log.Printf("Invalid table name specified: %s", tableName)
+		response = "Invalid table name specified."
+	}
+
 	sendMessage(bot, message.Chat.ID, response)
-}
-
-func saveMessageNotFilteredTable(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
-	senderID := message.Chat.ID
-	sendingDate := message.Time()
-	messageID := message.MessageID
-	messageText := message.Text
-
-	// Save message into not_filtered_messages table
-    _, err := dbConn.Exec(context.Background(),
-        "INSERT INTO not_filtered_messages (sender_id, sending_date, message_id, message_contents) VALUES ($1, $2, $3, $4)",
-        senderID, sendingDate, messageID, messageText)
-    if err != nil {
-        log.Printf("Error saving message to not_filtered_messages table: %v\n", err)
-		sendMessage(bot, message.Chat.ID, "Failed to save message.")
-        return
-    }
-
-    sendMessage(bot, message.Chat.ID, "Message is saved to not_filtered_messages table")
 }
